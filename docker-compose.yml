@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    volumes:
+      # Mount a folder to capture the generated chart.html
+      - ./out:/app/out
+    # Run the app, then copy the chart into the mounted folder
+    command: sh -c "./app && cp chart.html /app/out"

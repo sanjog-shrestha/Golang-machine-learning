@@ -1,13 +1,19 @@
-# Build Stage
-FROM golang:1.22 AS build 
+FROM golang:1.22 AS build
 WORKDIR /app
+
+# Copy module file(s) first for better layer caching
 COPY go.mod ./
-COPY . . 
+# Copy the rest of the source
+COPY . .
+
+# Resolve dependencies and write go.sum inside the build
+RUN go mod tidy
+
+# Build the binary
 RUN go build -o app .
 
-# Run stage
 FROM debian:bookworm-slim
-WORKDIR /app 
+WORKDIR /app
 COPY --from=build /app/app .
 COPY data.json .
-CMD [ "./app" ]
+CMD ["./app"]
