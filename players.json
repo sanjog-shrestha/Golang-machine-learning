@@ -1,0 +1,48 @@
+{
+    "footballers": [
+        {
+            "name": "  lionel MESSI ",
+            "team": "Inter Miami",
+            "active": true,
+            "goals": 15,
+            "sport": "football"
+        },
+        {
+            "name": "PELE",
+            "team": "  santos",
+            "active": false,
+            "goals": -1281,
+            "sport": "Football"
+        },
+        {
+            "name": "lionel messi",
+            "team": "Inter Miami",
+            "active": true,
+            "goals": 15,
+            "sport": "FOOTBALL"
+        },
+        {
+            "name": "",
+            "team": "Unknown FC",
+            "active": true,
+            "goals": 5,
+            "sport": "football"
+        }
+    ],
+    "cricketers": [
+        {
+            "name": "virat   kohli",
+            "team": "RCB",
+            "active": true,
+            "runs": 12000,
+            "sport": "cricket"
+        },
+        {
+            "name": "Virat Kohli",
+            "team": "rcb",
+            "active": true,
+            "runs": 0,
+            "sport": "Cricket"
+        }
+    ]
+}

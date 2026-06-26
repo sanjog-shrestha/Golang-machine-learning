@@ -1,128 +1,168 @@
-# go-data-demo
+# go-sports
 
-A beginner-friendly Go project demonstrating an end-to-end data workflow — **loading, cleansing, exploratory data analysis (EDA), and visualization** — running entirely in **Docker** via **Docker Compose**. No local Go installation required.
+A small, beginner-friendly Go project for learning **data loading, handling, and cleansing** with a sports theme — packaged to run in Docker. It demonstrates Go modules, struct embedding (Go's take on inheritance), interfaces, and a data preprocessing pipeline.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Quick Start (Docker)](#quick-start-docker)
+- [Running Locally (without Docker)](#running-locally-without-docker)
+- [How It Works](#how-it-works)
+- [Go Concepts Demonstrated](#go-concepts-demonstrated)
+- [Sample Output](#sample-output)
+- [Next Steps](#next-steps)
+
+---
 
 ## Features
 
-- **Load** JSON data from a file into typed Go structs
-- **Cleanse & preprocess**: trim whitespace, normalize casing, validate fields, deduplicate records
-- **EDA**: compute summary statistics (count, min, max, mean, median, standard deviation)
-- **Visualize**: render an interactive HTML bar chart with [go-echarts](https://github.com/go-echarts/go-echarts)
-- Fully containerized — runs with a single `docker compose up`
+- Load sports data from a JSON file into typed Go structs.
+- Organize code into **modules and packages** (`athlete`, `preprocess`).
+- Model data with **struct embedding** (composition instead of inheritance).
+- Use **interfaces** for polymorphism across different athlete types.
+- A **data cleansing & preprocessing** pipeline that normalizes, validates, sanitizes, and deduplicates messy input.
+- A **multi-stage Docker build** producing a small Alpine-based runtime image.
+
+---
 
 ## Project Structure
 
 ```
-go-data-demo/
-├── Dockerfile
-├── docker-compose.yml
-├── go.mod
-├── data.json
-├── main.go
-└── out/              # generated: chart.html lands here
+go-sports/
+├── Dockerfile            # Multi-stage build (compile in Go image, run on Alpine)
+├── go.mod                # Module definition: module path "go-sports"
+├── main.go               # Entry point: load → clean → process → print
+├── players.json          # Sample (deliberately messy) sports data
+├── athlete/              # Core domain package
+│   ├── athlete.go        # Base Athlete struct + Performer interface
+│   └── specialized.go    # Footballer & Cricketer (embed Athlete)
+└── preprocess/           # Data cleansing package
+    └── clean.go          # Normalize, validate, sanitize, deduplicate
 ```
 
-## Requirements
+---
 
-- [Docker](https://www.docker.com/) with the Compose plugin
+## Prerequisites
 
-That's it — Go runs inside the container, so it does not need to be installed on the host.
+Choose one path:
 
-## Getting Started
+- **Docker** — the only requirement for the recommended workflow. [Install Docker](https://docs.docker.com/get-docker/).
+- **Go 1.22+** — if you prefer to run it directly on your machine. [Install Go](https://go.dev/dl/).
 
-Create the output folder and run:
+---
+
+## Quick Start (Docker)
+
+Build the image:
 
 ```bash
-mkdir -p out
-docker compose up --build
+docker build -t go-sports .
 ```
 
-This builds the image (resolving dependencies and compiling inside the container), runs the program, and writes `chart.html` into `./out/`. Open `out/chart.html` in a browser to view the interactive chart.
+Run the container (the `--rm` flag removes it after it exits):
 
-### Common Commands
-
-| Command | What it does |
-|---------|--------------|
-| `docker compose up --build` | Rebuild and run (use after code changes) |
-| `docker compose up` | Run again without rebuilding |
-| `docker compose down` | Stop and clean up |
-
-## The Data Pipeline
-
-The program processes records through a deliberate sequence.
-
-### 1. Load
-
-Reads `data.json` into memory and unmarshals it into a slice of `Person` structs.
-
-```go
-type Person struct {
-    ID    int    `json:"id"`
-    Name  string `json:"name"`
-    Age   int    `json:"age"`
-    Email string `json:"email"`
-}
+```bash
+docker run --rm go-sports
 ```
 
-### 2. Cleanse & Preprocess
+That's it — the program loads the data, cleans it, and prints the results.
 
-Each record is normalized, then validated, then deduplicated. Order matters — normalizing before validating prevents, for example, a whitespace-padded email from being wrongly rejected.
+---
 
-| Step | Rule |
-|------|------|
-| Clean | Trim whitespace, lowercase emails, capitalize names |
-| Validate | Drop records with empty name, age outside 0–120, or no `@` in email |
-| Deduplicate | Drop repeated IDs (keeps the first valid one) |
+## Running Locally (without Docker)
 
-### 3. EDA
+From the project root:
 
-Computes summary statistics over the age column.
-
-| Statistic | Meaning |
-|-----------|---------|
-| Count | Number of valid records |
-| Min / Max | Smallest and largest values |
-| Mean | Average |
-| Median | Middle value |
-| Std Dev | Spread around the mean (population) |
-
-### 4. Visualize
-
-Renders an interactive bar chart of age per person to `chart.html` using go-echarts (HTML/JavaScript output, so no GUI or image libraries are needed in the container).
-
-## Sample Output
-
+```bash
+go run .
 ```
-Loaded 6 raw records
-Kept 3 clean records, dropped 3
 
---- EDA: Age ---
-Count:   3
-Min:     25.00
-Max:     35.00
-Mean:    30.00
-Median:  30.00
-Std Dev: 4.08
+Or build a binary and run it:
 
-Wrote chart.html
+```bash
+go build -o sports-app .
+./sports-app
 ```
+
+---
+
+## How It Works
+
+The program runs a simple pipeline in `main.go`:
+
+1. **Load** — `os.ReadFile` reads `players.json` as raw bytes.
+2. **Parse** — `json.Unmarshal` decodes the JSON into a `Roster` struct.
+3. **Cleanse** — the `preprocess` package normalizes text, drops invalid rows, sanitizes numbers, and removes duplicates.
+4. **Process** — cleaned records are gathered into a slice of the `Performer` interface and their behaviors are called.
+5. **Report** — counts and descriptions are printed before and after cleaning, so you can see what the pipeline changed.
+
+The sample `players.json` is intentionally messy — stray whitespace, mixed casing, a negative goal count, an empty name, and duplicate players — so the cleansing step has real work to do.
+
+---
 
 ## Go Concepts Demonstrated
 
-- **Struct tags** map JSON keys to Go fields
-- **Pointer vs value receivers**: `clean()` uses a pointer receiver (it mutates), `valid()` uses a value receiver (it only reads)
-- **Maps as sets**: `map[int]bool` tracks seen IDs, since Go has no built-in set type
-- **Slice copying before sorting**: `sort` mutates in place, so a copy protects the caller's data
-- **Multi-stage Docker builds** keep the final image small
+| Concept | Where | What to look for |
+|---|---|---|
+| Modules & packages | `go.mod`, all folders | Module path `go-sports`; subpackages imported as `go-sports/athlete` |
+| Structs & struct tags | `athlete/*.go` | `` `json:"name"` `` tags map struct fields to JSON keys |
+| Embedding (composition) | `specialized.go` | `Footballer` embeds `Athlete` and inherits its fields/methods |
+| Field & method promotion | `main.go` | `footballer.Name` and `footballer.Describe()` come from `Athlete` |
+| Interfaces (polymorphism) | `athlete.go` | `Performer` interface; satisfied implicitly by any type with `Stats()` |
+| Methods & receivers | `athlete.go` | `func (a Athlete) Describe()` — `a` is the receiver |
+| JSON marshal/unmarshal | `main.go` | `encoding/json` for decoding and encoding |
+| Error handling | `main.go` | The idiomatic `if err != nil` pattern |
+| Maps as sets | `preprocess/clean.go` | `map[string]bool` used to deduplicate |
+| Regular expressions | `preprocess/clean.go` | `regexp` collapses repeated whitespace |
+| Value semantics | `preprocess/clean.go` | Structs passed by value; cleaning returns a fresh slice |
+
+### A note on "inheritance"
+
+Go has **no classical inheritance**. Instead it uses **composition** via struct embedding (a `Footballer` *has an* `Athlete`) and **interfaces** for shared behavior. This is more explicit than subclassing and avoids fragile deep class hierarchies.
+
+### Data cleansing stages
+
+- **Normalization** — trim/collapse whitespace and unify casing (`MESSI` → `Messi`).
+- **Validation** — drop records missing required fields (e.g. empty name).
+- **Sanitization** — fix out-of-range values (a negative goal count is clamped to `0`).
+- **Deduplication** — collapse repeats using a composite `name|team` key.
+
+---
+
+## Sample Output
+
+Your exact output will vary, but it follows this shape:
+
+```
+Raw: 4 footballers, 2 cricketers
+Cleaned: 2 footballers, 1 cricketers
+
+=== Cleaned Performers ===
+Lionel Messi plays for Inter Miami (active) | 15 goals
+Pele plays for Santos (retired) | 0 goals
+Virat Kohli plays for Rcb (active) | 12000 runs
+```
+
+Notice that duplicates and the empty-name row were removed, casing was normalized, and Pele's negative goals were clamped to `0`.
+
+---
 
 ## Next Steps
 
-- Add a histogram to show age distribution by bucket
-- Compute frequency analysis on categorical fields
-- Read CSV input with `encoding/csv`
-- Stream large files instead of loading them fully into memory
-- Pull data from a database with `database/sql`
+Ideas to extend the project as you keep learning:
+
+- Make cleansing **configurable** with a `CleanOptions` struct (e.g. clamp vs. drop bad numbers).
+- Factor the shared footballer/cricketer cleaning logic behind a **generic** pipeline.
+- Read from **CSV** instead of JSON to practice another format.
+- Expose the cleaned data over an **HTTP API**.
+- Add **unit tests** (`go test`) for the cleansing functions.
+
+---
 
 ## License
 
-MIT
+This is a learning project — use it freely.
