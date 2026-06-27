@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"go-sports/athlete"
+	"go-sports/mlmodel"
 	"go-sports/preprocess"
 	"go-sports/stats" // NEW
 	"go-sports/viz"   // NEW
@@ -68,4 +69,33 @@ func main() {
 		return
 	}
 	fmt.Println("\nChart written to goals_chart.html (open it in a browser)")
+
+	// ============ LINEAR REGRESSION ============
+	fmt.Println("\n==== Linear Regression: predict goals from matches ====")
+
+	// 1. Build the dataset. In a real project you'd pull these from your
+	//    cleaned roster; here we use illustrative (matches, goals) pairs.
+	raw := []mlmodel.Sample{
+		{X: 10, Y: 4},
+		{X: 20, Y: 9},
+		{X: 30, Y: 14},
+		{X: 40, Y: 18},
+		{X: 50, Y: 23},
+	}
+
+	// 2. Normalize features so gradient descent converges reliably.
+	scaled, min, span := mlmodel.Normalize(raw)
+
+	// 3. Train.
+	model := mlmodel.LinearModel{} // starts at w=0, b=0
+	history := model.Train(scaled, 0.1, 1000)
+
+	// 4. Report training progress and final fit.
+	fmt.Printf("Cost: start=%.4f  end=%.4f\n", history[0], history[len(history)-1])
+	model.Summary(scaled)
+
+	// 5. Make a prediction for a new player with 35 matches.
+	newMatches := 35.0
+	pred := model.Predict((newMatches - min) / span)
+	fmt.Printf("\nPrediction: a player with %.0f matches scores ~%.1f goals\n", newMatches, pred)
 }
