@@ -3,15 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+
 	"go-sports/athlete"
 	"go-sports/preprocess"
-	"os"
+	"go-sports/stats" // NEW
+	"go-sports/viz"   // NEW
 )
 
-// Roster matches the top-level shape of the JSON file.
 type Roster struct {
 	Footballers []athlete.Footballer `json:"footballers"`
-	Cricketers  []athlete.Cricketer  `json:"Cricketers"`
+	Cricketers  []athlete.Cricketer  `json:"cricketers"`
 }
 
 func main() {
@@ -23,37 +25,47 @@ func main() {
 
 	var roster Roster
 	if err := json.Unmarshal(data, &roster); err != nil {
-		fmt.Println("Error parsing json:", err)
+		fmt.Println("Error parsing JSON:", err)
 		return
 	}
 
-	// --- RAW counts before cleansing ---
-	fmt.Printf("Raw: %d footballers. %d cricketers\n", len(roster.Footballers), len(roster.Cricketers))
-
-	// --- CLEANSING + PREPROCESSING STEP ---
+	// --- Cleansing (from previous step) ---
 	roster.Footballers = preprocess.CleanFootballers(roster.Footballers)
 	roster.Cricketers = preprocess.CleanCricketers(roster.Cricketers)
 
-	fmt.Printf("Cleaned: %d footballers, %d cricketers\n", len(roster.Footballers), len(roster.Cricketers))
+	// ============ EXPLORATORY DATA ANALYSIS ============
+	fmt.Println("===== EDA: Football Goals =====")
 
-	// Collect everyone into a slice of the Performer INTERFACE.
-	// Different concrete types living in one collection = polymorphism.
-	var performers []athlete.Performer
+	// extract the numeric field we want to analyze
+	goals := make([]float64, 0, len(roster.Footballers))
 	for _, f := range roster.Footballers {
-		performers = append(performers, f)
+		goals = append(goals, float64(f.Goals))
 	}
+	goalSummary := stats.Describe(goals)
+	goalSummary.Print("Goals")
 
-	for _, c := range roster.Cricketers {
-		performers = append(performers, c)
-	}
-
-	fmt.Println("=== Ckeaned Perfomers ===")
+	// categorical EDA: how many players per team
+	teams := make([]string, 0)
 	for _, f := range roster.Footballers {
-		fmt.Printf("%s | %s\n", f.Describe(), f.Stats())
+		teams = append(teams, f.Team)
+	}
+	freq := stats.Frequency(teams)
+	fmt.Println("\n--- Players per Team ---")
+	for team, n := range freq {
+		fmt.Printf("  %s: %d\n", team, n)
 	}
 
-	for _, c := range roster.Cricketers {
-		fmt.Printf("%s | %s\n", c.Describe(), c.Stats())
+	// ============ DATA VISUALIZATION ============
+	// Build a bar chart of goals per footballer.
+	bars := make([]viz.Bar, 0, len(roster.Footballers))
+	for _, f := range roster.Footballers {
+		bars = append(bars, viz.Bar{Label: f.Name, Value: float64(f.Goals)})
 	}
 
+	html := viz.BarChartHTML("Goals by Footballer", bars)
+	if err := viz.WriteHTML("goals_chart.html", html); err != nil {
+		fmt.Println("Error writing chart:", err)
+		return
+	}
+	fmt.Println("\nChart written to goals_chart.html (open it in a browser)")
 }
