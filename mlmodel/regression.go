@@ -153,3 +153,93 @@ func Normalize(data []Sample) (scaled []Sample, min, span float64) {
 	}
 	return scaled, min, span
 }
+
+// ===== MEAN SQUARED ERROR (evaluation metric) =====
+
+// MSE is the standard Mean Squared Error: (1/n) Σ (h(xᵢ) - yᵢ)².
+// Note: this differs from Cost(), which uses 1/2n for cleaner gradients.
+// MSE is what you report; Cost is what you optimize.
+func (m LinearModel) MSE(data []Sample) float64 {
+	n := len(data)
+	if n == 0 {
+		return 0
+	}
+	var sum float64
+	for _, s := range data {
+		err := m.Predict(s.X) - s.Y
+		sum += err * err
+	}
+	return sum / float64(n)
+}
+
+// ===== RESIDUALS (diagnostic) =====
+
+// Residual pairs a feature value with its prediction error (y - ŷ).
+type Residual struct {
+	X        float64
+	Residual float64
+}
+
+// Residuals computes y - prediction for each sample.
+// Good fit -> residuals scattered randomly around zero.
+// Pattern/curve in residuals -> a linear model is the wrong choice.
+func (m LinearModel) Residuals(data []Sample) []Residual {
+	out := make([]Residual, len(data))
+	for i, s := range data {
+		out[i] = Residual{X: s.X, Residual: s.Y - m.Predict(s.X)}
+	}
+	return out
+}
+
+// ===== L1 REGULARIZATION (Lasso) =====
+
+// CostL1 is MSE-style cost plus the L1 penalty: (lambda/n) * |w|.
+// The bias term is conventionally NOT regularized.
+func (m LinearModel) CostL1(data []Sample, lambda float64) float64 {
+	base := m.Cost(data) // existing 1/2n MSE cost
+	n := float64(len(data))
+	if n == 0 {
+		return base
+	}
+
+	return base + (lambda/n)*math.Abs(m.Weight)
+}
+
+// sign returns -1, 0, or +1 — the derivative of |w|.
+func sign(x float64) float64 {
+	switch {
+	case x > 0:
+		return 1
+	case x < 0:
+		return -1
+	default:
+		return 0
+	}
+}
+
+// gradientStepL1 is gradient descent with an L1 penalty on the weight.
+// The penalty's gradient is lambda * sign(w), applied to the weight only.
+func (m *LinearModel) gradientStepL1(data []Sample, lr, lambda float64) {
+	n := float64(len(data))
+	var dW, dB float64
+	for _, s := range data {
+		err := m.Predict(s.X) - s.Y
+		dW += err * s.X
+		dB += err
+	}
+	dW = dW/n + (lambda/n)*sign(m.Weight) // L1 term added to weight gradient
+	dB /= n                               // bias left unregularized
+
+	m.Weight -= lr * dW
+	m.Bias -= lr * dB
+}
+
+// TrainL1 runs regularized gradient descent and returns the cost history.
+func (m *LinearModel) TrainL1(data []Sample, lr, lambda float64, epochs int) []float64 {
+	history := make([]float64, 0, epochs)
+	for i := 0; i < epochs; i++ {
+		m.gradientStepL1(data, lr, lambda)
+		history = append(history, m.CostL1(data, lambda))
+	}
+	return history
+}

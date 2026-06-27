@@ -1,0 +1,23 @@
+# docker-compose.yml for the go-sports project
+# Usage:
+#   docker compose up --build      # build + run, prints output, writes HTML charts
+#   docker compose run --rm app    # one-off run
+#
+# Generated charts (goals_chart.html, residuals.html) are written inside the
+# container and copied to ./output on the host via the mounted volume.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-sports:latest
+    container_name: go-sports
+    # Run the program, then copy any generated HTML charts to the mounted folder
+    command: sh -c "./sports-app && cp -f *.html /app/output/ 2>/dev/null || true"
+    volumes:
+      # Charts produced in the container land in ./output on your machine
+      - ./output:/app/output
+    # The program is a short-lived batch job, not a long-running server,
+    # so it should not restart after it finishes.
+    restart: "no"

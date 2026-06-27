@@ -98,4 +98,26 @@ func main() {
 	newMatches := 35.0
 	pred := model.Predict((newMatches - min) / span)
 	fmt.Printf("\nPrediction: a player with %.0f matches scores ~%.1f goals\n", newMatches, pred)
+
+	// ============ FINE-TUNING: evaluation & regularization ============
+	fmt.Println("\n==== Fine-Tuning ====")
+
+	fmt.Printf("MSE (no regularization): %.4f\n", model.MSE(scaled))
+
+	lassoModel := mlmodel.LinearModel{}
+	lambda := 0.1
+	lassoModel.TrainL1(scaled, 0.1, lambda, 1000)
+	fmt.Printf("L1 (lambda=%.2f): weight:%.3f bias=%.3f MSE=%.4f\n", lambda, lassoModel.Weight, lassoModel.Bias, lassoModel.MSE(scaled))
+
+	res := model.Residuals(scaled)
+	pts := make([]viz.Point, len(res))
+	for i, r := range res {
+		pts[i] = viz.Point{X: r.X, Y: r.Residual}
+	}
+	resHTML := viz.ResidualPlotHTML("Residuals: goals model", pts)
+	if err := viz.WriteHTML("residuals.html", resHTML); err != nil {
+		fmt.Println("Error writing residual plot", err)
+	} else {
+		fmt.Println("Residual plot written to residuals.html")
+	}
 }
