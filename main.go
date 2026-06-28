@@ -8,8 +8,9 @@ import (
 	"go-sports/athlete"
 	"go-sports/mlmodel"
 	"go-sports/preprocess"
-	"go-sports/stats" // NEW
-	"go-sports/viz"   // NEW
+	"go-sports/stats"
+	"go-sports/tree"
+	"go-sports/viz"
 )
 
 type Roster struct {
@@ -150,4 +151,34 @@ func main() {
 	scores := []float64{2.0, 1.0, 0.1}
 	probs := mlmodel.Softmax(scores)
 	fmt.Printf("\nMulti-class Softmax %v -> %.3f, %.3f, %.3f\n", scores, probs[0], probs[1], probs[2])
+
+	// ... inside main(), after logistic regression ...
+
+	// ============ DECISION TREE & RANDOM FOREST ============
+	fmt.Println("\n==== Decision Tree & Random Forest ====")
+
+	// Features: [matches, goals]. Label: 1 = top scorer, 0 = not.
+	rows := []tree.Row{
+		{Features: []float64{10, 2}, Label: 0},
+		{Features: []float64{15, 3}, Label: 0},
+		{Features: []float64{20, 5}, Label: 0},
+		{Features: []float64{30, 14}, Label: 1},
+		{Features: []float64{35, 18}, Label: 1},
+		{Features: []float64{40, 22}, Label: 1},
+		{Features: []float64{25, 6}, Label: 0},
+		{Features: []float64{38, 20}, Label: 1},
+	}
+
+	// Single decision tree.
+	dt := &tree.DecisionTree{MaxDepth: 4, MinLeafSize: 1}
+	dt.Fit(rows)
+	testPlayer := []float64{33, 16}
+	fmt.Printf("Decision tree predicts class %d for %v\n", dt.Predict(testPlayer), testPlayer)
+
+	// Random forest of 50 trees.
+	rf := &tree.RandomForest{NTrees: 50, MaxDepth: 4}
+	rf.Fit(rows)
+	fmt.Printf("Random forest predits class %d for %v\n", rf.Predict(testPlayer), testPlayer)
+	fmt.Printf("Forest training accuracy: %.3f\n", rf.Accuracy(rows))
+
 }

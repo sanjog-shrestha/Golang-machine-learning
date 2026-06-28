@@ -1,6 +1,6 @@
 # go-sports
 
-A small, beginner-friendly Go project for learning the full data workflow — **loading, cleansing, exploratory analysis, visualization, and from-scratch machine learning models (linear *and* logistic regression)** — built around a sports theme and packaged to run in Docker. It demonstrates Go modules, struct embedding (Go's take on inheritance), interfaces, a preprocessing pipeline, descriptive statistics, dependency-free SVG charting, and regression/classification models built without any ML libraries.
+A small, beginner-friendly Go project for learning the full data workflow — **loading, cleansing, exploratory analysis, visualization, and machine learning from scratch** — built around a sports theme and packaged to run in Docker. It demonstrates Go modules, struct embedding (Go's take on inheritance), interfaces, a preprocessing pipeline, descriptive statistics, dependency-free SVG charting, and three ML model families implemented without any ML libraries: linear regression, logistic regression, and decision trees / random forests.
 
 ---
 
@@ -14,9 +14,11 @@ A small, beginner-friendly Go project for learning the full data workflow — **
 - [Running Locally (without Docker)](#running-locally-without-docker)
 - [How It Works](#how-it-works)
 - [Packages](#packages)
-- [The Linear Regression Model](#the-linear-regression-model)
-- [Fine-Tuning: Evaluation & Optimization](#fine-tuning-evaluation--optimization)
-- [Logistic Regression for Binary Classification](#logistic-regression-for-binary-classification)
+- [Machine Learning Models](#machine-learning-models)
+  - [Linear Regression](#linear-regression)
+  - [Fine-Tuning: Evaluation & Optimization](#fine-tuning-evaluation--optimization)
+  - [Logistic Regression](#logistic-regression)
+  - [Decision Trees & Random Forests](#decision-trees--random-forests)
 - [Go Concepts Demonstrated](#go-concepts-demonstrated)
 - [Sample Output](#sample-output)
 - [Next Steps](#next-steps)
@@ -26,15 +28,15 @@ A small, beginner-friendly Go project for learning the full data workflow — **
 ## Features
 
 - Load sports data from a JSON file into typed Go structs.
-- Organize code into **modules and packages** (`athlete`, `preprocess`, `stats`, `viz`, `mlmodel`).
+- Organize code into **modules and packages** (`athlete`, `preprocess`, `stats`, `viz`, `mlmodel`, `tree`).
 - Model data with **struct embedding** (composition instead of inheritance).
 - Use **interfaces** for polymorphism across different athlete types.
 - A **data cleansing & preprocessing** pipeline that normalizes, validates, sanitizes, and deduplicates messy input.
 - **Exploratory Data Analysis (EDA)**: descriptive statistics plus categorical frequency counts.
 - **Data visualization**: self-contained SVG charts (bar chart + residual plot) written to HTML files — no external dependencies.
-- **Linear regression from scratch**: hypothesis, cost, gradient descent, training, prediction, and evaluation.
-- **Model fine-tuning**: standard MSE metric, residual diagnostics, and L1 (Lasso) regularization.
-- **Logistic regression from scratch**: sigmoid, log-loss, gradient descent, classification metrics, decision boundaries, and a softmax for multi-class.
+- **Linear regression from scratch**: hypothesis, cost, gradient descent, training, prediction, evaluation, MSE, residuals, and L1 regularization.
+- **Logistic regression from scratch**: sigmoid, log-loss, gradient descent, classification metrics, decision boundaries, and softmax for multi-class.
+- **Decision trees & random forests from scratch**: Gini impurity, recursive splitting, bagging, feature subsampling, and majority voting.
 - A **multi-stage Docker build** plus a **Docker Compose** workflow that writes charts back to your host.
 
 ---
@@ -46,7 +48,7 @@ go-sports/
 ├── Dockerfile            # Multi-stage build (compile in Go image, run on Alpine)
 ├── docker-compose.yml    # One-command build/run; mounts ./output for charts
 ├── go.mod                # Module definition: module path "go-sports"
-├── main.go               # Entry point: load → clean → analyze → visualize → train → tune → classify
+├── main.go               # Entry point: load → clean → analyze → visualize → ML
 ├── players.json          # Sample (deliberately messy) sports data
 ├── output/               # Generated charts land here (created on first run)
 ├── athlete/              # Core domain package
@@ -58,9 +60,12 @@ go-sports/
 │   └── eda.go            # Describe() summary stats + Frequency() counts
 ├── viz/                  # Visualization package
 │   └── chart.go          # SVG bar chart + residual plot in standalone HTML
-└── mlmodel/              # Machine learning package
-    ├── regression.go     # Linear regression + MSE, residuals, L1 regularization
-    └── logistic.go       # Logistic regression: sigmoid, log-loss, metrics, softmax
+├── mlmodel/              # Regression & classification package
+│   ├── regression.go     # Linear regression + MSE, residuals, L1 regularization
+│   └── logistic.go       # Logistic regression + sigmoid, metrics, softmax
+└── tree/                 # Tree-based models package
+    ├── tree.go           # Decision tree: Gini, splitting, recursive build
+    └── forest.go         # Random forest: bagging, feature subsampling, voting
 ```
 
 ---
@@ -82,7 +87,7 @@ The simplest way to build and run everything:
 docker compose up --build
 ```
 
-This builds the image, runs the program (printing EDA, regression, and classification results to the console), and copies the generated charts into `./output/` on your machine. Open them in a browser:
+This builds the image, runs the program (printing EDA and all model results to the console), and copies the generated charts into `./output/` on your machine. Open them in a browser:
 
 - `output/goals_chart.html` — goals per footballer
 - `output/residuals.html` — residual diagnostic plot
@@ -151,11 +156,11 @@ The program runs a pipeline in `main.go`:
 3. **Cleanse** — the `preprocess` package normalizes text, drops invalid rows, sanitizes numbers, and removes duplicates.
 4. **Analyze (EDA)** — the `stats` package computes descriptive statistics and frequency counts.
 5. **Visualize** — the `viz` package builds an SVG bar chart and writes it to `goals_chart.html`.
-6. **Train & predict (linear)** — the `mlmodel` package fits a linear regression model, evaluates it, and makes a prediction.
-7. **Fine-tune** — report standard MSE, train an L1-regularized variant, and write a residual plot.
-8. **Classify (logistic)** — fit a logistic regression model, evaluate it with a confusion matrix, find its decision boundary, and demonstrate softmax for multi-class.
+6. **Linear regression** — fit with gradient descent, evaluate, predict; then fine-tune with MSE, a residual plot, and L1 regularization.
+7. **Logistic regression** — classify a binary label with the sigmoid and log-loss; report metrics, decision boundary, and a softmax example.
+8. **Trees & forest** — train a decision tree and a random forest, then predict and score.
 
-The sample `players.json` is intentionally messy — stray whitespace, mixed casing, a negative goal count, an empty name, and duplicate players — so the cleansing step has real work to do before analysis.
+The sample `players.json` is intentionally messy so the cleansing step has real work to do before analysis.
 
 ---
 
@@ -167,61 +172,73 @@ The sample `players.json` is intentionally messy — stray whitespace, mixed cas
 | `preprocess` | Data cleansing | `CleanFootballers`, `CleanCricketers` |
 | `stats` | Exploratory analysis | `Describe` → `Summary`, `Frequency` |
 | `viz` | Visualization | `Bar`, `BarChartHTML`, `Point`, `ResidualPlotHTML`, `WriteHTML` |
-| `mlmodel` | Machine learning | `LinearModel`, `LogisticModel`, `Normalize`, `Sigmoid`, `Softmax`, `Metrics` |
+| `mlmodel` | Regression & classification | `LinearModel`, `LogisticModel`, `Normalize`, `Sigmoid`, `Softmax`, `Metrics` |
+| `tree` | Tree-based models | `Row`, `DecisionTree`, `RandomForest` |
 
 ---
 
-## The Linear Regression Model
+## Machine Learning Models
 
-The `mlmodel` package implements all six stages of building a regression model, with no external ML dependencies.
+All models are implemented from scratch with no external ML dependencies — the point is to see the math, not hide it behind a library.
+
+### Linear Regression
+
+Simple linear regression (`y = w*x + b`) predicting goals from matches played, covering all six standard stages.
 
 | Stage | Implementation | What it does |
 |---|---|---|
-| **1. Model & data** | `Sample`, `LinearModel` | A `Sample` is one (feature, target) pair; `LinearModel` holds `Weight` (slope) and `Bias` (intercept) |
+| **1. Model & data** | `Sample`, `LinearModel` | A `Sample` is one (feature, target) pair; `LinearModel` holds `Weight` and `Bias` |
 | **2. Hypothesis** | `Predict(x)` | Computes `h(x) = w*x + b` |
-| **3. Cost function** | `Cost(data)` | Mean Squared Error: `J = (1/2n) Σ (h(xᵢ) − yᵢ)²` |
-| **4. Gradient descent** | `gradientStep(data, lr)` | Computes partial derivatives and nudges parameters downhill |
-| **5. Training** | `Train(data, lr, epochs)` | Repeats gradient steps, returns the cost history |
-| **6. Prediction & evaluation** | `Predict`, `RSquared`, `RMSE`, `Summary` | Forecasts new values and reports goodness of fit |
+| **3. Cost** | `Cost(data)` | Mean Squared Error: `J = (1/2n) Σ (h(xᵢ) − yᵢ)²` |
+| **4. Gradient descent** | `gradientStep(data, lr)` | Partial derivatives nudge parameters downhill |
+| **5. Training** | `Train(data, lr, epochs)` | Repeats steps, returns cost history |
+| **6. Prediction & evaluation** | `Predict`, `RSquared`, `RMSE` | Forecasts and reports goodness of fit |
 
-Key ideas: **MSE** penalizes large errors; **gradient descent** moves parameters opposite the gradient with a **learning rate** over many **epochs**; **feature scaling** (`Normalize`) keeps it from diverging; and read-only methods use value receivers while the mutating `gradientStep` uses a pointer receiver.
+Key points: MSE squares errors (penalizing big ones, staying positive); the learning rate sets step size; **feature scaling** via `Normalize` keeps gradient descent stable; read-only methods use value receivers while the mutating `gradientStep` uses a pointer receiver.
 
----
-
-## Fine-Tuning: Evaluation & Optimization
+### Fine-Tuning: Evaluation & Optimization
 
 | Tool | Implementation | What it does |
 |---|---|---|
 | **MSE metric** | `MSE(data)` | Standard `1/n` MSE for *reporting* (distinct from the `1/2n` `Cost` used for *optimizing*) |
-| **Residuals** | `Residuals(data)`, `viz.ResidualPlotHTML` | Computes `y − ŷ` per sample and plots it for diagnostics |
+| **Residuals** | `Residuals(data)`, `viz.ResidualPlotHTML` | Computes `y − ŷ` and plots it for diagnostics |
 | **L1 regularization** | `CostL1`, `TrainL1` | Lasso penalty that discourages large weights and can zero them out |
 
-Key ideas: **MSE vs. Cost** are deliberately separate (report vs. optimize); **residual plots** reveal whether a linear model is appropriate (random scatter = good, patterns = bad); **L1 (Lasso)** adds `lambda × |w|` whose gradient `lambda × sign(w)` can drive weights exactly to zero for feature selection, with the bias left unregularized.
+A residual plot showing random scatter around zero confirms a linear model fits; a curve or funnel means it doesn't. L1 adds `lambda × |w|` to the cost; its gradient `lambda × sign(w)` is a constant push toward zero that can perform feature selection. The bias is left unregularized.
 
----
+### Logistic Regression
 
-## Logistic Regression for Binary Classification
-
-The `mlmodel` package also implements logistic regression from scratch, predicting whether a player is a **top scorer** (1) or not (0). It covers all seven stages.
+Binary classification — "is this player a top scorer?" — covering all seven stages.
 
 | Stage | Implementation | What it does |
 |---|---|---|
-| **1. Model & data** | `LabeledSample`, `LogisticModel` | Same `Weight`/`Bias` shape as linear, but output is a probability and labels are 0/1 |
-| **2. Sigmoid** | `Sigmoid(z)`, `Probability(x)` | Squashes `w*x + b` into `(0,1)` so it reads as `P(y=1)` |
-| **3. Cost function** | `Cost(data)` | Binary cross-entropy (log loss), which is convex — MSE is not used here |
-| **4. Gradient descent** | `gradientStep`, `Train` | Same gradient form as linear regression: `(ŷ − y)·x` |
-| **5. Prediction & evaluation** | `Classify`, `Evaluate` → `Metrics` | Confusion matrix with accuracy, precision, recall, F1 |
-| **6. Decision boundary** | `DecisionBoundary(threshold)` | Feature value where `P(y=1) = threshold`; for 0.5 it's `−b/w` |
-| **7. Beyond binary** | `Softmax(scores)` | Multi-class generalization: a probability distribution summing to 1 |
+| **1. Model & data** | `LabeledSample`, `LogisticModel` | Same `Weight`/`Bias` shape; target is a 0/1 label |
+| **2. Sigmoid** | `Sigmoid(z)`, `Probability(x)` | Squashes `w*x + b` into a `(0,1)` probability |
+| **3. Cost** | `Cost(data)` | Binary cross-entropy (log loss), not MSE |
+| **4. Gradient descent** | `gradientStep(data, lr)` | Gradient simplifies to the same `(ŷ − y)·x` form |
+| **5. Prediction & evaluation** | `Classify`, `Evaluate` → `Metrics` | Confusion matrix, accuracy, precision, recall, F1 |
+| **6. Decision boundary** | `DecisionBoundary(threshold)` | The feature value where `P(y=1) = threshold` |
+| **7. Beyond binary** | `Softmax(scores)` | Multi-class generalization of the sigmoid |
 
-### Key ideas
+Key points: log loss is used because MSE is non-convex with the sigmoid; precision/recall/F1 matter because accuracy misleads on imbalanced classes; the decision boundary for threshold 0.5 reduces to `x = −b/w`; softmax outputs a probability distribution summing to 1, with a max-subtraction trick for numerical stability.
 
-- **Sigmoid** turns a linear score into a probability — the defining step that makes classification possible.
-- **Log loss, not MSE.** MSE with a sigmoid is non-convex (local minima); cross-entropy is convex, so gradient descent finds the global minimum. A small epsilon guards against `log(0)`.
-- **Identical gradient.** After differentiating log loss through the sigmoid, the update simplifies to the same `(prediction − actual) × feature` form as linear regression — only the prediction and cost differ.
-- **Evaluation beyond accuracy.** A confusion matrix yields **precision** (correctness of positive predictions), **recall** (coverage of actual positives), and **F1** (their harmonic mean) — essential when classes are imbalanced.
-- **Decision boundary** is where the model is exactly undecided. In 1-D it's a point (`−b/w`); with two features a line; in higher dimensions a hyperplane.
-- **Softmax** generalizes the sigmoid to many classes, outputting a probability distribution. Subtracting the max score before exponentiating is a numerical-stability trick that avoids overflow.
+### Decision Trees & Random Forests
+
+Tree-based classification predicting the top-scorer label from `[matches, goals]`.
+
+| Concept | Implementation | What it does |
+|---|---|---|
+| **Data** | `Row` | Feature vector plus a binary label |
+| **Impurity** | `gini(rows)` | 0 = pure, ~0.5 = maximally mixed for two classes |
+| **Splitting** | `bestSplit`, `split` | Finds the feature/threshold with the largest information gain |
+| **Tree** | `DecisionTree`, `Node` | Recursive `*Node` structure; leaves predict by majority |
+| **Stopping** | `MaxDepth`, `MinLeafSize` | Halts growth to limit overfitting |
+| **Ensemble** | `RandomForest` | Many trees trained on bootstrap samples |
+| **Bagging** | `bootstrap(rows)` | Resamples rows with replacement per tree |
+| **Feature subsampling** | `featuresPerSplit` | Each split considers `sqrt(features)` random features |
+| **Voting** | `Predict` | Majority vote across all trees |
+
+Key points: a single deep tree overfits by memorizing the data. A random forest reduces this with two sources of randomness — bagging (each tree sees a different resample) and feature subsampling (trees split on different features) — which decorrelates the trees so averaging their votes generalizes far better. The tree is built from `*Node` pointers because a recursive, dynamically-shaped structure can't be a plain value; `featuresPerSplit` is unexported, so a lone tree defaults to all features while the forest sets it internally.
 
 ---
 
@@ -229,22 +246,22 @@ The `mlmodel` package also implements logistic regression from scratch, predicti
 
 | Concept | Where | What to look for |
 |---|---|---|
-| Modules & packages | `go.mod`, all folders | Module path `go-sports`; subpackages imported as `go-sports/mlmodel` |
+| Modules & packages | `go.mod`, all folders | Module path `go-sports`; subpackages like `go-sports/tree` |
 | Structs & struct tags | `athlete/*.go` | `` `json:"name"` `` tags map struct fields to JSON keys |
-| Embedding (composition) | `specialized.go` | `Footballer` embeds `Athlete` and inherits its fields/methods |
-| Field & method promotion | `main.go` | `footballer.Name` and `footballer.Describe()` come from `Athlete` |
-| Interfaces (polymorphism) | `athlete.go` | `Performer` interface; satisfied implicitly by any type with `Stats()` |
-| Methods & receivers | `regression.go`, `logistic.go` | Value receivers for reads; pointer receivers for mutating steps |
+| Embedding (composition) | `specialized.go` | `Footballer` embeds `Athlete` |
+| Interfaces (polymorphism) | `athlete.go` | `Performer` satisfied implicitly |
+| Methods & receivers | `regression.go`, `logistic.go` | Value receivers for reads; pointer receivers for mutation |
+| Recursion & pointer structures | `tree/tree.go` | `*Node` tree built and traversed recursively |
+| Encapsulation | `tree/tree.go` | Unexported `featuresPerSplit` hides forest internals |
+| Randomness | `tree/forest.go` | `math/rand` for bootstrap sampling and feature shuffling |
+| Maps as counters | `clean.go`, `eda.go`, `tree.go` | Label counts, dedup sets, vote tallies |
 | JSON marshal/unmarshal | `main.go` | `encoding/json` for decoding |
 | Error handling | `main.go` | The idiomatic `if err != nil` pattern |
-| Maps as sets / counters | `clean.go`, `eda.go` | `map[string]bool` to dedupe; `map[string]int` to count |
 | Regular expressions | `preprocess/clean.go` | `regexp` collapses repeated whitespace |
-| Math functions | `regression.go`, `logistic.go` | `math.Sqrt`, `math.Abs`, `math.Exp`, `math.Log` |
-| Switch statements | `logistic.go` | Confusion-matrix tallying and the `sign` helper |
+| Math & sorting | `stats`, `mlmodel`, `tree` | `math.Exp`, `math.Sqrt`, `sort.Float64s` |
 | Efficient string building | `viz/chart.go` | `strings.Builder` to assemble SVG |
-| Multiple return values | `mlmodel/*.go` | `Normalize` returns scaled data + min + span; `DecisionBoundary` returns value + ok |
-| Closures | `viz/chart.go` | `sx`/`sy` coordinate-mapping functions capture plot dimensions |
-| Value semantics | `clean.go`, `eda.go` | Slices copied before mutation; functions stay pure |
+| Multiple return values | `regression.go`, `logistic.go` | `Normalize`, `DecisionBoundary` |
+| Closures | `viz/chart.go` | `sx`/`sy` coordinate mappers capture plot dimensions |
 
 ### A note on "inheritance"
 
@@ -261,27 +278,19 @@ Go has **no classical inheritance**. Instead it uses **composition** via struct 
 
 ## Sample Output
 
-Console output follows this shape:
+Console output follows this shape (exact numbers vary):
 
 ```
 ===== EDA: Football Goals =====
 --- Goals ---
   Count : 2
-  Min   : 0.00
-  Max   : 15.00
   Mean  : 7.50
-  Median: 7.50
-  StdDev: 7.50
-
-Chart written to goals_chart.html (open it in a browser)
+  ...
 
 ===== Linear Regression: predict goals from matches =====
-Cost: start=0.1234  end=0.0012
 Learned model: goals = 0.470 * matches + 0.030
   R²   : 0.998
   RMSE : 0.350
-
-Prediction: a player with 35 matches scores ~16.1 goals
 
 ===== Fine-Tuning =====
 MSE (no regularization): 0.0024
@@ -289,20 +298,21 @@ L1 (lambda=0.10): weight=0.452 bias=0.041  MSE=0.0031
 Residual plot written to residuals.html
 
 ===== Logistic Regression: is this player a top scorer? =====
-Log-loss: start=0.6931 end=0.0488
+Log-loss: start=0.6931 end=0.0456
   Confusion: TP=3 TN=3 FP=0 FN=0
   Accuracy : 1.000
   Precision: 1.000
   Recall   : 1.000
   F1 Score : 1.000
   Decision boundary at x = 0.421
-
-Player at x=0.60: P(top scorer)=0.973 -> class 1
-
+Player at x=0.60: P(top scorer)=0.912 -> class 1
 Multi-class softmax [2 1 0.1] -> 0.659, 0.242, 0.099
-```
 
-Exact numbers vary, but loss should fall sharply, the linear model's R² should be near 1.0, and the classifier should separate the two classes cleanly on this simple sample.
+===== Decision Tree & Random Forest =====
+Decision tree predicts class 1 for [33 16]
+Random forest predicts class 1 for [33 16]
+Forest training accuracy: 1.000
+```
 
 ---
 
@@ -310,14 +320,14 @@ Exact numbers vary, but loss should fall sharply, the linear model's R² should 
 
 Ideas to extend the project as you keep learning:
 
-- Add a **sigmoid-curve chart** with the decision boundary marked to `viz`.
-- Add a **cost-history chart** so you can see models converge.
-- Extend to **multiple features** (multivariate regression / classification).
-- Implement full **multinomial logistic regression** using the softmax.
-- Add a **train/test split** to evaluate on unseen data.
+- Add **feature importance** to the random forest (which features drive the splits).
+- Add a **cost-history chart** to `viz` so you can watch models converge.
+- Extend regression to **multiple features** to make L1's feature-selection effect visible.
 - Add **L2 regularization (Ridge)** and compare it with L1.
+- Add a **train/test split** and **cross-validation** to evaluate on unseen data.
+- Add **out-of-bag (OOB) error** estimation to the forest.
 - Read from **CSV** instead of JSON to practice another format.
-- Expose the models over an **HTTP API** (then add a `ports:` mapping and `restart: unless-stopped` to the Compose file).
+- Expose the cleaned data, charts, and predictions over an **HTTP API**.
 - Add **unit tests** (`go test`) for the cleansing, stats, and model functions.
 
 ---
