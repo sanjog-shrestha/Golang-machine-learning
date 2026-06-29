@@ -178,7 +178,29 @@ func main() {
 	// Random forest of 50 trees.
 	rf := &tree.RandomForest{NTrees: 50, MaxDepth: 4}
 	rf.Fit(rows)
-	fmt.Printf("Random forest predits class %d for %v\n", rf.Predict(testPlayer), testPlayer)
+	fmt.Printf("Random forest predicts class %d for %v\n", rf.Predict(testPlayer), testPlayer)
 	fmt.Printf("Forest training accuracy: %.3f\n", rf.Accuracy(rows))
 
+	// ============ FEATURE IMPORTANCE & EXPLAINABILITY ============
+	fmt.Println("\n===== Feature Importance & Explainability =====")
+
+	featureNames := []string{"matches", "goals"}
+
+	// Forest-level feature importance (which features matter overall).
+	importance := rf.FeatureImportance(len(featureNames))
+	fmt.Println("Feature importance (forest, normalized):")
+	for i, name := range featureNames {
+		fmt.Printf("	%-8s: %.3f\n", name, importance[i])
+	}
+
+	// Per-prediction explanation from a single interpretable tree.
+	path, treepred := dt.Explain(testPlayer)
+	fmt.Printf("\nWhy the tree predicted class %d for %v:\n", treepred, testPlayer)
+	for _, s := range path {
+		op := ">"
+		if s.WentLeft {
+			op = "<="
+		}
+		fmt.Printf("	%s (%.1f) %s %.1f\n", featureNames[s.FeatureIdx], s.Value, op, s.Threshold)
+	}
 }

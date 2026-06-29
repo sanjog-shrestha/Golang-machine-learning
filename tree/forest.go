@@ -82,3 +82,32 @@ func (rf *RandomForest) Accuracy(rows []Row) float64 {
 	}
 	return float64(correct) / float64(len(rows))
 }
+
+// ===== FEATURE IMPORTANCE (forest) =====
+
+// FeatureImportance averages each tree's importance, then normalizes the
+// result to sum to 1.0 so the values read as relative contributions.
+func (rf *RandomForest) FeatureImportance(nFeatures int) []float64 {
+	total := make([]float64, nFeatures)
+	for _, t := range rf.Trees {
+		ti := t.FeatureImportance(nFeatures)
+		for i, v := range ti {
+			total[i] += v
+		}
+	}
+	// average over trees
+	for i := range total {
+		total[i] /= float64(len(rf.Trees))
+	}
+	// normalize to sum to 1
+	var sum float64
+	for _, v := range total {
+		sum += v
+	}
+	if sum > 0 {
+		for i := range total {
+			total[i] /= sum
+		}
+	}
+	return total
+}

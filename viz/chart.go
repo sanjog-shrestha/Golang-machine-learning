@@ -16,6 +16,12 @@ type Bar struct {
 
 // BarChartHTML builds a self-contained HTML page with an inline SVG bar chart.
 func BarChartHTML(title string, bars []Bar) string {
+	return barChart(title, bars, "%.0f") // integer value labels
+}
+
+// barChart is the shared renderer. valueFmt controls how the value label
+// is formatted (e.g. "%.0f" for counts, "%.3f" for importance scores).
+func barChart(title string, bars []Bar, valueFmt string) string {
 	const (
 		width    = 600
 		barH     = 36
@@ -53,7 +59,7 @@ func BarChartHTML(title string, bars []Bar) string {
 			`<rect x="%d" y="%d" width="%.1f" height="%d" rx="4" fill="#3b82f6"/>`,
 			leftPad, y, barW, barH))
 		sb.WriteString(fmt.Sprintf(
-			`<text x="%.1f" y="%d" font-size="13" dominant-baseline="middle">%.0f</text>`,
+			`<text x="%.1f" y="%d" font-size="13" dominant-baseline="middle">`+valueFmt+`</text>`,
 			float64(leftPad)+barW+8, y+barH/2, b.Value))
 	}
 	sb.WriteString(`</svg>`)
@@ -75,7 +81,7 @@ type Point struct {
 }
 
 // ResidualPlotHTML renders residuals as a scatter around a zero baseline.
-// Points above the line over-predict; below, under-predict
+// Points above the line over-predict; below, under-predict.
 func ResidualPlotHTML(title string, points []Point) string {
 	const (
 		w, h = 600, 360
@@ -117,7 +123,7 @@ func ResidualPlotHTML(title string, points []Point) string {
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(
-		`<svg width="%d" height="%d" xmlns="http://www.w3.org/200/svg" font-family="sans-serif">`,
+		`<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">`,
 		w, h))
 
 	// zero reference line
@@ -134,7 +140,7 @@ func ResidualPlotHTML(title string, points []Point) string {
 		sb.WriteString(fmt.Sprintf(
 			`<circle cx="%.1f" cy="%.1f" r="5" fill="%s"/>`, sx(p.X), sy(p.Y), color))
 	}
-	sb.WriteString("</svg>'")
+	sb.WriteString(`</svg>`)
 
 	return fmt.Sprintf(
 		`<!DOCTYPE html><html><head><meta charset="utf-8"><title>%s</title></head>`+
@@ -142,4 +148,12 @@ func ResidualPlotHTML(title string, points []Point) string {
 			`<p style="font-family:sans-serif;color:#555">Blue = under-predicted, Red = over-predicted. `+
 			`Random scatter around the line = good linear fit.</p></body></html>`,
 		title, title, sb.String())
+}
+
+// ImportanceChartHTML renders feature-importance scores as a bar chart.
+// Identical layout to BarChartHTML but with 3-decimal value labels, since
+// normalized importances are small fractions (e.g. 0.732) that "%.0f" would
+// round to 0.
+func ImportanceChartHTML(title string, bars []Bar) string {
+	return barChart(title, bars, "%.3f")
 }

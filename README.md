@@ -1,6 +1,6 @@
 # go-sports
 
-A small, beginner-friendly Go project for learning the full data workflow — **loading, cleansing, exploratory analysis, visualization, and machine learning from scratch** — built around a sports theme and packaged to run in Docker. It demonstrates Go modules, struct embedding (Go's take on inheritance), interfaces, a preprocessing pipeline, descriptive statistics, dependency-free SVG charting, and three ML model families implemented without any ML libraries: linear regression, logistic regression, and decision trees / random forests.
+A small, beginner-friendly Go project for learning the full data workflow — **loading, cleansing, exploratory analysis, visualization, and machine learning from scratch** — built around a sports theme and packaged to run in Docker. It demonstrates Go modules, struct embedding (Go's take on inheritance), interfaces, a preprocessing pipeline, descriptive statistics, dependency-free SVG charting, and three ML model families implemented without any ML libraries: linear regression, logistic regression, and decision trees / random forests — with feature importance and model explainability.
 
 ---
 
@@ -19,8 +19,10 @@ A small, beginner-friendly Go project for learning the full data workflow — **
   - [Fine-Tuning: Evaluation & Optimization](#fine-tuning-evaluation--optimization)
   - [Logistic Regression](#logistic-regression)
   - [Decision Trees & Random Forests](#decision-trees--random-forests)
+  - [Feature Importance & Explainability](#feature-importance--explainability)
 - [Go Concepts Demonstrated](#go-concepts-demonstrated)
 - [Sample Output](#sample-output)
+- [Interpreting the Output](#interpreting-the-output)
 - [Next Steps](#next-steps)
 
 ---
@@ -37,6 +39,7 @@ A small, beginner-friendly Go project for learning the full data workflow — **
 - **Linear regression from scratch**: hypothesis, cost, gradient descent, training, prediction, evaluation, MSE, residuals, and L1 regularization.
 - **Logistic regression from scratch**: sigmoid, log-loss, gradient descent, classification metrics, decision boundaries, and softmax for multi-class.
 - **Decision trees & random forests from scratch**: Gini impurity, recursive splitting, bagging, feature subsampling, and majority voting.
+- **Feature importance & explainability**: forest-wide Gini importance plus per-prediction decision-path explanations.
 - A **multi-stage Docker build** plus a **Docker Compose** workflow that writes charts back to your host.
 
 ---
@@ -64,8 +67,8 @@ go-sports/
 │   ├── regression.go     # Linear regression + MSE, residuals, L1 regularization
 │   └── logistic.go       # Logistic regression + sigmoid, metrics, softmax
 └── tree/                 # Tree-based models package
-    ├── tree.go           # Decision tree: Gini, splitting, recursive build
-    └── forest.go         # Random forest: bagging, feature subsampling, voting
+    ├── tree.go           # Decision tree: Gini, splitting, build, importance, Explain
+    └── forest.go         # Random forest: bagging, subsampling, voting, importance
 ```
 
 ---
@@ -91,6 +94,7 @@ This builds the image, runs the program (printing EDA and all model results to t
 
 - `output/goals_chart.html` — goals per footballer
 - `output/residuals.html` — residual diagnostic plot
+- `output/importance.html` — feature importance bar chart (if enabled)
 
 For a one-off run without recreating the service:
 
@@ -138,7 +142,7 @@ From the project root:
 go run .
 ```
 
-This prints results to the console and drops `goals_chart.html` and `residuals.html` right in your project folder. Or build a binary:
+This prints results to the console and drops the chart HTML files right in your project folder. Or build a binary:
 
 ```bash
 go build -o sports-app .
@@ -155,10 +159,11 @@ The program runs a pipeline in `main.go`:
 2. **Parse** — `json.Unmarshal` decodes the JSON into a `Roster` struct.
 3. **Cleanse** — the `preprocess` package normalizes text, drops invalid rows, sanitizes numbers, and removes duplicates.
 4. **Analyze (EDA)** — the `stats` package computes descriptive statistics and frequency counts.
-5. **Visualize** — the `viz` package builds an SVG bar chart and writes it to `goals_chart.html`.
-6. **Linear regression** — fit with gradient descent, evaluate, predict; then fine-tune with MSE, a residual plot, and L1 regularization.
+5. **Visualize** — the `viz` package builds an SVG bar chart.
+6. **Linear regression** — fit, evaluate, predict; then fine-tune with MSE, a residual plot, and L1 regularization.
 7. **Logistic regression** — classify a binary label with the sigmoid and log-loss; report metrics, decision boundary, and a softmax example.
 8. **Trees & forest** — train a decision tree and a random forest, then predict and score.
+9. **Importance & explainability** — rank features by Gini importance and trace a single prediction's decision path.
 
 The sample `players.json` is intentionally messy so the cleansing step has real work to do before analysis.
 
@@ -173,7 +178,7 @@ The sample `players.json` is intentionally messy so the cleansing step has real 
 | `stats` | Exploratory analysis | `Describe` → `Summary`, `Frequency` |
 | `viz` | Visualization | `Bar`, `BarChartHTML`, `Point`, `ResidualPlotHTML`, `WriteHTML` |
 | `mlmodel` | Regression & classification | `LinearModel`, `LogisticModel`, `Normalize`, `Sigmoid`, `Softmax`, `Metrics` |
-| `tree` | Tree-based models | `Row`, `DecisionTree`, `RandomForest` |
+| `tree` | Tree-based models | `Row`, `DecisionTree`, `RandomForest`, `Step` |
 
 ---
 
@@ -183,28 +188,11 @@ All models are implemented from scratch with no external ML dependencies — the
 
 ### Linear Regression
 
-Simple linear regression (`y = w*x + b`) predicting goals from matches played, covering all six standard stages.
-
-| Stage | Implementation | What it does |
-|---|---|---|
-| **1. Model & data** | `Sample`, `LinearModel` | A `Sample` is one (feature, target) pair; `LinearModel` holds `Weight` and `Bias` |
-| **2. Hypothesis** | `Predict(x)` | Computes `h(x) = w*x + b` |
-| **3. Cost** | `Cost(data)` | Mean Squared Error: `J = (1/2n) Σ (h(xᵢ) − yᵢ)²` |
-| **4. Gradient descent** | `gradientStep(data, lr)` | Partial derivatives nudge parameters downhill |
-| **5. Training** | `Train(data, lr, epochs)` | Repeats steps, returns cost history |
-| **6. Prediction & evaluation** | `Predict`, `RSquared`, `RMSE` | Forecasts and reports goodness of fit |
-
-Key points: MSE squares errors (penalizing big ones, staying positive); the learning rate sets step size; **feature scaling** via `Normalize` keeps gradient descent stable; read-only methods use value receivers while the mutating `gradientStep` uses a pointer receiver.
+Simple linear regression (`y = w*x + b`) predicting goals from matches played, covering all six standard stages: model & data (`Sample`, `LinearModel`), hypothesis (`Predict`), cost (`Cost`, MSE with a `1/2n` factor for clean gradients), gradient descent (`gradientStep`), training (`Train`, returns cost history), and evaluation (`RSquared`, `RMSE`). Feature scaling via `Normalize` keeps gradient descent stable; read-only methods use value receivers while the mutating `gradientStep` uses a pointer receiver.
 
 ### Fine-Tuning: Evaluation & Optimization
 
-| Tool | Implementation | What it does |
-|---|---|---|
-| **MSE metric** | `MSE(data)` | Standard `1/n` MSE for *reporting* (distinct from the `1/2n` `Cost` used for *optimizing*) |
-| **Residuals** | `Residuals(data)`, `viz.ResidualPlotHTML` | Computes `y − ŷ` and plots it for diagnostics |
-| **L1 regularization** | `CostL1`, `TrainL1` | Lasso penalty that discourages large weights and can zero them out |
-
-A residual plot showing random scatter around zero confirms a linear model fits; a curve or funnel means it doesn't. L1 adds `lambda × |w|` to the cost; its gradient `lambda × sign(w)` is a constant push toward zero that can perform feature selection. The bias is left unregularized.
+A reporting-grade `MSE` (`1/n`, distinct from the `1/2n` optimization `Cost`), `Residuals` plotted via `viz.ResidualPlotHTML` for diagnostics, and L1/Lasso regularization (`CostL1`, `TrainL1`) that adds `lambda × |w|` to the cost — its gradient `lambda × sign(w)` is a constant push toward zero that can perform feature selection. The bias is left unregularized.
 
 ### Logistic Regression
 
@@ -220,7 +208,7 @@ Binary classification — "is this player a top scorer?" — covering all seven 
 | **6. Decision boundary** | `DecisionBoundary(threshold)` | The feature value where `P(y=1) = threshold` |
 | **7. Beyond binary** | `Softmax(scores)` | Multi-class generalization of the sigmoid |
 
-Key points: log loss is used because MSE is non-convex with the sigmoid; precision/recall/F1 matter because accuracy misleads on imbalanced classes; the decision boundary for threshold 0.5 reduces to `x = −b/w`; softmax outputs a probability distribution summing to 1, with a max-subtraction trick for numerical stability.
+Log loss is used because MSE is non-convex with the sigmoid; precision/recall/F1 matter because accuracy misleads on imbalanced classes; the decision boundary for threshold 0.5 reduces to `x = −b/w`; softmax outputs a probability distribution summing to 1.
 
 ### Decision Trees & Random Forests
 
@@ -232,13 +220,30 @@ Tree-based classification predicting the top-scorer label from `[matches, goals]
 | **Impurity** | `gini(rows)` | 0 = pure, ~0.5 = maximally mixed for two classes |
 | **Splitting** | `bestSplit`, `split` | Finds the feature/threshold with the largest information gain |
 | **Tree** | `DecisionTree`, `Node` | Recursive `*Node` structure; leaves predict by majority |
-| **Stopping** | `MaxDepth`, `MinLeafSize` | Halts growth to limit overfitting |
-| **Ensemble** | `RandomForest` | Many trees trained on bootstrap samples |
+| **Ensemble** | `RandomForest` | Many trees on bootstrap samples |
 | **Bagging** | `bootstrap(rows)` | Resamples rows with replacement per tree |
 | **Feature subsampling** | `featuresPerSplit` | Each split considers `sqrt(features)` random features |
 | **Voting** | `Predict` | Majority vote across all trees |
 
-Key points: a single deep tree overfits by memorizing the data. A random forest reduces this with two sources of randomness — bagging (each tree sees a different resample) and feature subsampling (trees split on different features) — which decorrelates the trees so averaging their votes generalizes far better. The tree is built from `*Node` pointers because a recursive, dynamically-shaped structure can't be a plain value; `featuresPerSplit` is unexported, so a lone tree defaults to all features while the forest sets it internally.
+A single deep tree overfits; a forest reduces this with two sources of randomness — bagging and feature subsampling — which decorrelate the trees so averaging their votes generalizes far better.
+
+### Feature Importance & Explainability
+
+These answer two different questions: importance is **global** (which features matter across the whole model), while an explanation is **local** (why this one prediction came out as it did).
+
+| Tool | Implementation | What it does |
+|---|---|---|
+| **Tree importance** | `DecisionTree.FeatureImportance` | Sums `samples × gain` for each feature over all splits |
+| **Forest importance** | `RandomForest.FeatureImportance` | Averages per-tree importance, normalized to sum to 1 |
+| **Decision path** | `DecisionTree.Explain` → `[]Step` | Traces root-to-leaf, recording each threshold test |
+
+**Gini importance** credits a feature with the impurity decrease of every split that uses it, weighted by how many samples pass through that node — so features that produce big, clean separations near the root score highest. The forest averages this across all trees and normalizes, so each value reads as that feature's share of the decision-making.
+
+**The decision path** is the most faithful explanation a tree can give because it *is* the computation — no post-hoc approximation. `Explain` records each threshold test from root to leaf, producing a literal chain like "matches (33.0) > 25.0 → class 1." This is why single trees are prized for interpretability: the model and its explanation are the same object.
+
+> **Caveat:** Gini importance is biased toward high-cardinality features (more distinct values give more candidate thresholds). **Permutation importance** — shuffling one feature and measuring the accuracy drop — avoids that bias and is a natural next addition.
+
+To record importance data, each `Node` stores `NSamples`, `Impurity`, and `Gain` during training.
 
 ---
 
@@ -251,7 +256,8 @@ Key points: a single deep tree overfits by memorizing the data. A random forest 
 | Embedding (composition) | `specialized.go` | `Footballer` embeds `Athlete` |
 | Interfaces (polymorphism) | `athlete.go` | `Performer` satisfied implicitly |
 | Methods & receivers | `regression.go`, `logistic.go` | Value receivers for reads; pointer receivers for mutation |
-| Recursion & pointer structures | `tree/tree.go` | `*Node` tree built and traversed recursively |
+| Recursion & pointer structures | `tree/tree.go` | `*Node` tree built, traversed, and explained recursively |
+| Closures | `tree/tree.go`, `viz/chart.go` | Recursive `walk` closure for importance; `sx`/`sy` mappers |
 | Encapsulation | `tree/tree.go` | Unexported `featuresPerSplit` hides forest internals |
 | Randomness | `tree/forest.go` | `math/rand` for bootstrap sampling and feature shuffling |
 | Maps as counters | `clean.go`, `eda.go`, `tree.go` | Label counts, dedup sets, vote tallies |
@@ -260,8 +266,7 @@ Key points: a single deep tree overfits by memorizing the data. A random forest 
 | Regular expressions | `preprocess/clean.go` | `regexp` collapses repeated whitespace |
 | Math & sorting | `stats`, `mlmodel`, `tree` | `math.Exp`, `math.Sqrt`, `sort.Float64s` |
 | Efficient string building | `viz/chart.go` | `strings.Builder` to assemble SVG |
-| Multiple return values | `regression.go`, `logistic.go` | `Normalize`, `DecisionBoundary` |
-| Closures | `viz/chart.go` | `sx`/`sy` coordinate mappers capture plot dimensions |
+| Multiple return values | `regression.go`, `tree.go` | `Normalize`, `Explain` |
 
 ### A note on "inheritance"
 
@@ -281,38 +286,54 @@ Go has **no classical inheritance**. Instead it uses **composition** via struct 
 Console output follows this shape (exact numbers vary):
 
 ```
-===== EDA: Football Goals =====
---- Goals ---
-  Count : 2
-  Mean  : 7.50
-  ...
-
 ===== Linear Regression: predict goals from matches =====
 Learned model: goals = 0.470 * matches + 0.030
   R²   : 0.998
   RMSE : 0.350
 
-===== Fine-Tuning =====
-MSE (no regularization): 0.0024
-L1 (lambda=0.10): weight=0.452 bias=0.041  MSE=0.0031
-Residual plot written to residuals.html
-
 ===== Logistic Regression: is this player a top scorer? =====
-Log-loss: start=0.6931 end=0.0456
-  Confusion: TP=3 TN=3 FP=0 FN=0
-  Accuracy : 1.000
-  Precision: 1.000
-  Recall   : 1.000
-  F1 Score : 1.000
+  Accuracy : 1.000  Precision: 1.000  Recall: 1.000  F1: 1.000
   Decision boundary at x = 0.421
-Player at x=0.60: P(top scorer)=0.912 -> class 1
-Multi-class softmax [2 1 0.1] -> 0.659, 0.242, 0.099
 
 ===== Decision Tree & Random Forest =====
 Decision tree predicts class 1 for [33 16]
 Random forest predicts class 1 for [33 16]
 Forest training accuracy: 1.000
+
+===== Feature Importance & Explainability =====
+Feature importance (forest, normalized):
+   matches : 0.521
+   goals   : 0.479
+
+Why the tree predicted class 1 for [33 16]:
+   matches (33.0) > 25.0
 ```
+
+---
+
+## Interpreting the Output
+
+### Feature importance
+
+```
+matches : 0.521
+goals   : 0.479
+```
+
+These are the forest's normalized Gini-importance scores, so they **sum to 1.0** and each reads as that feature's share of the total decision-making. Here `matches` (52%) and `goals` (48%) are almost equally important. That near-even split is expected when the two features are **highly correlated** — players with more matches tend to have more goals — so across 50 trees with random feature subsets, the credit gets shared roughly evenly rather than concentrating in one feature. Neither dominates.
+
+### The decision path
+
+```
+Why the tree predicted class 1 for [33 16]:
+   matches (33.0) > 25.0
+```
+
+This is the **literal path** the single decision tree walked for the player `[33 matches, 16 goals]`. It needed only **one test**: is `matches` (33.0) greater than 25.0? Yes — so it followed that branch to a leaf labeled class 1 (top scorer). The path is a single line because the data separates cleanly at "matches > 25," so the root split alone is decisive and the tree never had to examine `goals`.
+
+### Why they seem to disagree (but don't)
+
+The forest says both features matter (0.52 / 0.48), yet this one tree's explanation used only `matches`. That's not a contradiction. Global importance is **averaged over 50 bootstrapped trees**, each trained on different resampled data and feature subsets — many of those trees split on `goals`, which is how `goals` earns its 0.48 share. The explanation, by contrast, is **one specific tree's** path. Global (importance) and local (path) views answer different questions and are expected to look different.
 
 ---
 
@@ -320,12 +341,12 @@ Forest training accuracy: 1.000
 
 Ideas to extend the project as you keep learning:
 
-- Add **feature importance** to the random forest (which features drive the splits).
+- Add **permutation importance** as a less-biased alternative to Gini importance.
+- Visualize the **full tree structure** (not just one path) as an SVG.
 - Add a **cost-history chart** to `viz` so you can watch models converge.
 - Extend regression to **multiple features** to make L1's feature-selection effect visible.
 - Add **L2 regularization (Ridge)** and compare it with L1.
-- Add a **train/test split** and **cross-validation** to evaluate on unseen data.
-- Add **out-of-bag (OOB) error** estimation to the forest.
+- Add a **train/test split**, **cross-validation**, and **out-of-bag (OOB) error**.
 - Read from **CSV** instead of JSON to practice another format.
 - Expose the cleaned data, charts, and predictions over an **HTTP API**.
 - Add **unit tests** (`go test`) for the cleansing, stats, and model functions.

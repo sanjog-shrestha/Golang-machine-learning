@@ -96,6 +96,10 @@ type Node struct {
 	Right      *Node
 	Leaf       bool
 	Prediction int
+	// --- NEW: bookkeeping for feature importance & explanations ---
+	NSamples int     // how many training rows reached this node
+	Impurity float64 // Gini impurity at this node
+	Gain     float64 // weighted impurity decrease produced by this split
 }
 
 // DecisionTree wraps a root node plus stopping hyperparameters.
@@ -125,27 +129,31 @@ func majority(rows []Row) int {
 
 // build recursively grows the tree until a stopping condition is hit.
 func (t *DecisionTree) build(rows []Row, depth int) *Node {
-	// stopping conditions: pure node, too deep, or too few samples
+	imp := gini(rows)
+
 	if len(rows) == 0 {
 		return &Node{Leaf: true, Prediction: 0}
 	}
-	if gini(rows) == 0 || depth >= t.MaxDepth || len(rows) <= t.MinLeafSize {
-		return &Node{Leaf: true, Prediction: majority(rows)}
+
+	if imp == 0 || depth >= t.MaxDepth || len(rows) <= t.MinLeafSize {
+		return &Node{Leaf: true, Prediction: majority(rows), NSamples: len(rows), Impurity: imp}
 	}
 
-	// choose which features to consider at this split
 	nFeatures := len(rows[0].Features)
 	subset := featureSubset(nFeatures, t.featuresPerSplit)
 
 	idx, thr, gain := bestSplit(rows, subset)
 	if idx == -1 || gain <= 0 {
-		return &Node{Leaf: true, Prediction: majority(rows)}
+		return &Node{Leaf: true, Prediction: majority(rows), NSamples: len(rows), Impurity: imp}
 	}
 
 	left, right := split(rows, idx, thr)
 	return &Node{
 		FeatureIdx: idx,
 		Threshold:  thr,
+		NSamples:   len(rows),
+		Impurity:   imp,
+		Gain:       gain, // weighted impurity decrease (already computed by bestSplit)
 		Left:       t.build(left, depth+1),
 		Right:      t.build(right, depth+1),
 	}
@@ -189,4 +197,59 @@ func featureSubset(nFeatures, k int) []int {
 	}
 	rand.Shuffle(len(all), func(i, j int) { all[i], all[j] = all[j], all[i] })
 	return all[:k]
+}
+
+// ===== FEATURE IMPORTANCE (single tree) =====
+
+// FeatureImportance returns the raw, sample-weighted impurity decrease
+// attributed to each feature, summed over all splits in the tree.
+// Index i = importance of feature i. Not yet normalized.
+func (t *DecisionTree) FeatureImportance(nFeatures int) []float64 {
+	imp := make([]float64, nFeatures)
+	var walk func(n *Node)
+	walk = func(n *Node) {
+		if n == nil || n.Leaf {
+			return
+		}
+		// credit this split's feature with (samples * gain)
+		imp[n.FeatureIdx] += float64(n.NSamples) * n.Gain
+		walk(n.Left)
+		walk(n.Right)
+	}
+	walk(t.Root)
+	return imp
+}
+
+// ===== EXPLAINABILITY: decision path =====
+
+// Step is one node visited while classifying a sample.
+type Step struct {
+	FeatureIdx int
+	Threshold  float64
+	Value      float64 // the sample's value for that feature
+	WentLeft   bool    // true if value <= threshold
+}
+
+// Explain traces the path from root to leaf for one feature vector,
+// returning each decision made and the final prediction.
+func (t *DecisionTree) Explain(features []float64) (path []Step, prediction int) {
+	n := t.Root
+	for n != nil && !n.Leaf {
+		went := features[n.FeatureIdx] <= n.Threshold
+		path = append(path, Step{
+			FeatureIdx: n.FeatureIdx,
+			Threshold:  n.Threshold,
+			Value:      features[n.FeatureIdx],
+			WentLeft:   went,
+		})
+		if went {
+			n = n.Left
+		} else {
+			n = n.Right
+		}
+	}
+	if n != nil {
+		prediction = n.Prediction
+	}
+	return path, prediction
 }
